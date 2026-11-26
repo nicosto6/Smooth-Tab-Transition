@@ -1,25 +1,132 @@
 
 /*
- * Smooth Tab Transition
+ * Smooth Tab Transition v2.0.0
  * Zen Browser + Sine
+ *
+ * Features:
+ * - Smooth zoom and blur between normal tabs
+ * - Split View treated as one visual unit
+ * - No animation between panes of the same Split View
+ * - Live settings through Sine preferences
  */
 
 (() => {
     "use strict";
 
-    if (window.__smoothTabTransition) return;
-    window.__smoothTabTransition = true;
+    if (window.__smoothTabTransitionV2) return;
+    window.__smoothTabTransitionV2 = true;
 
-    const SETTINGS = {
+    const PREFIX = "smooth-tab-transition.";
+
+    const DEFAULTS = {
+        enabled: true,
         duration: 360,
         scale: 0.965,
         blur: 8,
-        easing: "cubic-bezier(0.22, 1, 0.36, 1)"
+        opacity: 0.55,
+        easing: "smooth",
+        animateSplit: true,
+        respectReducedMotion: true
     };
 
-    const reducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
-    );
+    const EASINGS = {
+        smooth: "cubic-bezier(0.22, 1, 0.36, 1)",
+        snappy: "cubic-bezier(0.16, 1, 0.3, 1)",
+        soft: "cubic-bezier(0.4, 0, 0.2, 1)",
+        linear: "linear"
+    };
+
+    const activeAnimations = new WeakMap();
+
+    function getBool(name, fallback) {
+        try {
+            return Services.prefs.getBoolPref(
+                PREFIX + name,
+                fallback
+            );
+        } catch {
+            return fallback;
+        }
+    }
+
+    function getNumber(name, fallback, min, max) {
+        try {
+            const value = Number(
+                Services.prefs.getStringPref(
+                    PREFIX + name,
+                    String(fallback)
+                )
+            );
+
+            if (!Number.isFinite(value)) return fallback;
+
+            return Math.min(max, Math.max(min, value));
+        } catch {
+            return fallback;
+        }
+    }
+
+    function getString(name, fallback) {
+        try {
+            return Services.prefs.getStringPref(
+                PREFIX + name,
+                fallback
+            );
+        } catch {
+            return fallback;
+        }
+    }
+
+    function getSettings() {
+        const easingName = getString(
+            "easing",
+            DEFAULTS.easing
+        );
+
+        return {
+            enabled: getBool("enabled", DEFAULTS.enabled),
+
+            duration: getNumber(
+                "duration",
+                DEFAULTS.duration,
+                100,
+                1200
+            ),
+
+            scale: getNumber(
+                "scale",
+                DEFAULTS.scale,
+                0.80,
+                0.995
+            ),
+
+            blur: getNumber(
+                "blur",
+                DEFAULTS.blur,
+                0,
+                24
+            ),
+
+            opacity: getNumber(
+                "opacity",
+                DEFAULTS.opacity,
+                0.1,
+                1
+            ),
+
+            easing: EASINGS[easingName] || EASINGS.smooth,
+
+            animateSplit: getBool(
+                "animate-split",
+                DEFAULTS.animateSplit
+            ),
+
+            respectReducedMotion: getBool(
+                "respect-reduced-motion",
+                DEFAULTS.respectReducedMotion
+            )
+        };
+    }
 
     function getContainer(tab) {
         return tab?.linkedBrowser?.closest(
@@ -27,75 +134,234 @@
         );
     }
 
+    /*
+     * Returns the actual Zen Split View group.
+     */
+    function getSplitGroup(tab) {
+        const group = tab?.group;
 
-  function isSplitView(oldTab, newTab) {
-        return [oldTab, newTab].some(tab =>
-            tab?.group?.hasAttribute("split-view-group") ||
-            tab?.hasAttribute("split-view") ||
-            tab?.splitView === true
-    );
-}
+        if (
+            group?.hasAttribute("split-view-group")
+        ) {
+            return group;
+        }
 
-
-    function animate(container, entering) {
-        if (!container) return;
-
-        const from = entering
-            ? {
-                transform: `scale(${SETTINGS.scale})`,
-                filter: `blur(${SETTINGS.blur}px)`,
-                opacity: 0.55
-            }
-            : {
-                transform: "scale(1)",
-                filter: "blur(0px)",
-                opacity: 1
-            };
-
-        const to = entering
-            ? {
-                transform: "scale(1)",
-                filter: "blur(0px)",
-                opacity: 1
-            }
-            : {
-                transform: `scale(${SETTINGS.scale})`,
-                filter: `blur(${SETTINGS.blur}px)`,
-                opacity: 0.55
-            };
-
-        container.animate([from, to], {
-            duration: SETTINGS.duration,
-            easing: SETTINGS.easing,
-            fill: "none"
-        });
+        return null;
     }
 
+    function isSplitTab(tab) {
+        return (
+            !!getSplitGroup(tab) ||
+            tab?.splitView === true ||
+            tab?.hasAttribute("split-view") ||
+            getContainer(tab)?.hasAttribute("is-zen-split")
+        );
+    }
+
+    /*
+     * Animates one element and cancels only
+     * animations created by this mod.
+     */
+    function runAnimation(element, keyframes, settings) {
+        if (!element) return;
+
+        const previous = activeAnimations.get(element);
+
+        if (previous) {
+            previous.cancel();
+        }
+
+        const animation = element.animate(
+            keyframes,
+            {
+                duration: settings.duration,
+                easing: settings.easing,
+                fill: "both"
+            }
+        );
+
+        activeAnimations.set(element, animation);
+
+        animation.finished
+            .then(() => {
+                if (activeAnimations.get(element) === animation) {
+                    activeAnimations.delete(element);
+                }
+
+                animation.cancel();
+            })
+            .catch(() => {});
+
+        return animation;
+    }
+
+    /*
+     * Normal tab outgoing animation.
+     */
+    function animateOutgoing(tab, settings) {
+        const container = getContainer(tab);
+
+        if (!container) return;
+
+        runAnimation(
+            container,
+            [
+                {
+                    transform: "scale(1)",
+                    filter: "blur(0px)",
+                    opacity: 1
+                },
+                {
+                    transform: `scale(${settings.scale})`,
+                    filter: `blur(${settings.blur}px)`,
+                    opacity: settings.opacity
+                }
+            ],
+            settings
+        );
+    }
+
+    /*
+     * Normal tab incoming animation.
+     */
+    function animateIncoming(tab, settings) {
+        const container = getContainer(tab);
+
+        if (!container) return;
+
+        runAnimation(
+            container,
+            [
+                {
+                    transform: `scale(${settings.scale})`,
+                    filter: `blur(${settings.blur}px)`,
+                    opacity: settings.opacity
+                },
+                {
+                    transform: "scale(1)",
+                    filter: "blur(0px)",
+                    opacity: 1
+                }
+            ],
+            settings
+        );
+    }
+
+    /*
+     * Split View transition.
+     *
+     * The entire tabpanels element is animated.
+     * Both split browsers are children of this
+     * element, so they move together.
+     */
+    function animateSplitTransition(settings) {
+        const panels =
+            gBrowser.tabpanels ||
+            document.getElementById("tabbrowser-tabpanels");
+
+        if (!panels) return;
+
+        const reduced = settings.scale;
+
+        runAnimation(
+            panels,
+            [
+                {
+                    offset: 0,
+                    transform: "scale(1)",
+                    filter: "blur(0px)",
+                    opacity: 1
+                },
+                {
+                    offset: 0.45,
+                    transform: `scale(${reduced})`,
+                    filter: `blur(${settings.blur}px)`,
+                    opacity: settings.opacity
+                },
+                {
+                    offset: 1,
+                    transform: "scale(1)",
+                    filter: "blur(0px)",
+                    opacity: 1
+                }
+            ],
+            settings
+        );
+    }
+
+    /*
+     * Main tab selection handler.
+     */
     function onTabSelect(event) {
-        const newTab = gBrowser.selectedTab;
         const oldTab = event.detail?.previousTab;
+        const newTab = gBrowser.selectedTab;
 
         if (
             !oldTab ||
             !newTab ||
-            oldTab === newTab ||
-            reducedMotion.matches
+            oldTab === newTab
         ) {
             return;
         }
 
-        // Never animate tabs inside Zen Split View.
-        if (isSplitView(oldTab, newTab)) {
+        const settings = getSettings();
+
+        if (!settings.enabled) return;
+
+        if (
+            settings.respectReducedMotion &&
+            window.matchMedia(
+                "(prefers-reduced-motion: reduce)"
+            ).matches
+        ) {
             return;
         }
 
-        animate(getContainer(oldTab), false);
-        animate(getContainer(newTab), true);
+        const oldGroup = getSplitGroup(oldTab);
+        const newGroup = getSplitGroup(newTab);
+
+        /*
+         * IMPORTANT:
+         * Selecting the left or right pane of
+         * the SAME Split View must not animate.
+         */
+        if (
+            oldGroup &&
+            newGroup &&
+            oldGroup === newGroup
+        ) {
+            return;
+        }
+
+        const oldIsSplit = isSplitTab(oldTab);
+        const newIsSplit = isSplitTab(newTab);
+
+        /*
+         * If either side belongs to a Split View,
+         * animate the complete browser viewport.
+         */
+        if (oldIsSplit || newIsSplit) {
+            if (!settings.animateSplit) return;
+
+            animateSplitTransition(settings);
+            return;
+        }
+
+        /*
+         * Normal tab -> normal tab.
+         */
+        animateOutgoing(oldTab, settings);
+        animateIncoming(newTab, settings);
     }
 
-    window.addEventListener("TabSelect", onTabSelect, true);
+    window.addEventListener(
+        "TabSelect",
+        onTabSelect,
+        true
+    );
 
     console.log(
-        "[Smooth Tab Transition] Successfully loaded!"
+        "[Smooth Tab Transition] v2.0.0 loaded successfully!"
     );
+
 })();
