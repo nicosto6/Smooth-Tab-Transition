@@ -1,15 +1,16 @@
+
 {
   "id": "smooth-tab-transition",
   "name": "Smooth Tab Transition",
-  "description": "Configurable tab and loading transitions with an integrated curve editor and Split View support.",
+  "description": "Independent smooth tab and loading transitions for Zen Browser.",
   "homepage": "https://github.com/nicosto6/Smooth-Tab-Transition",
   "author": "nicosto6",
-  "version": "4.0.0",
+  "version": "1.1.0",
   "preferences": "preferences.json",
   "scripts": {
     "smooth-tab-transition.uc.mjs": {
       "name": "Smooth Tab Transition",
-      "description": "Adds a toolbar button for the complete settings panel and applies tab transitions.",
+      "description": "Independent animated tab switching and page loading.",
       "include": [
         "chrome://browser/content/browser.xhtml"
       ]
@@ -19,8 +20,8 @@
     "tabs",
     "animations",
     "blur",
-    "split-view",
-    "customization"
+    "loading",
+    "transitions"
   ],
   "fork": [
     "zen"
