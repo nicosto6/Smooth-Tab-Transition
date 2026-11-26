@@ -6,21 +6,24 @@
  *
  * TAB TRANSITION:
  * - Independent duration, scale, blur, opacity and easing.
- * - Animates the whole Zen tab panel.
- * - Does not animate when switching between panels
- *   belonging to the same Split View group.
+ * - Normal tabs animate individually.
+ * - Split View is treated as ONE visual unit.
+ * - Entering or leaving Split View uses one transition.
+ * - Switching panels inside the same Split View
+ *   does not trigger a tab transition.
  *
  * LOADING TRANSITION:
  * - Independent duration, scale, blur, opacity and easing.
  * - Uses the browser progress listener.
- * - Each linkedBrowser has its own loading state and animation.
- * - The loading effect is applied to the page's <browser> element only.
- * - The native Zen loading indicator is not filtered.
+ * - Each linkedBrowser has its own loading state.
+ * - Each Split View panel loads independently.
+ * - The native Zen loading indicator is not blurred.
  *
  * SPLIT VIEW:
- * - Each pane has its own linkedBrowser.
- * - Each pane loads and finishes independently.
- * - One pane cannot cancel another pane's loading animation.
+ * - A Split View group is treated as one tab
+ *   for Tab Transition.
+ * - Each linkedBrowser remains independent
+ *   for Loading Transition.
  */
 
 (() => {
@@ -64,13 +67,12 @@
     );
 
     /*
-     * Every linkedBrowser has its own state.
-     * This is essential for independent Split View loading.
+     * Loading state is independent for every browser.
      */
     const loadingStates = new WeakMap();
 
     /*
-     * Tab animations are stored separately from loading animations.
+     * Tab animations are tracked separately.
      */
     const tabAnimations = new WeakMap();
 
@@ -260,11 +262,58 @@
     }
 
     /* ================================================
+       GENERIC ANIMATION
+    ================================================ */
+
+    function cancelAnimation(element) {
+        if (!element) return;
+
+        try {
+            element.getAnimations().forEach(animation => {
+                animation.cancel();
+            });
+        } catch {
+            // Best-effort cancellation.
+        }
+    }
+
+    function animate(
+        element,
+        from,
+        to,
+        duration,
+        easing,
+        fill = "none"
+    ) {
+        if (!element || duration <= 0) {
+            return null;
+        }
+
+        try {
+            return element.animate(
+                [from, to],
+                {
+                    duration,
+                    easing,
+                    fill
+                }
+            );
+        } catch (error) {
+            console.warn(
+                "[Smooth Tab Transition] Animation error:",
+                error
+            );
+
+            return null;
+        }
+    }
+
+    /* ================================================
        TAB TRANSITION
     ================================================ */
 
     /*
-     * Returns the complete visual container of a tab.
+     * Returns the normal visual container of a tab.
      */
     function getTabContainer(tab) {
         const browser = tab?.linkedBrowser;
@@ -278,10 +327,41 @@
         );
     }
 
-    function cancelTabAnimation(container) {
-        if (!container) return;
+    /*
+     * Detects a real Zen Split View group.
+     */
+    function isSplitViewTab(tab) {
+        return Boolean(
+            tab?.group?.hasAttribute?.("split-view-group")
+        );
+    }
 
-        const animation = tabAnimations.get(container);
+    /*
+     * Returns the visual target for a tab transition.
+     *
+     * Normal tab:
+     *   Its own browser container.
+     *
+     * Split View:
+     *   The common tabpanels element.
+     *
+     * This makes the complete Split View behave
+     * like one normal tab during transitions.
+     */
+    function getTabTransitionTarget(tab) {
+        if (!tab) return null;
+
+        if (isSplitViewTab(tab)) {
+            return gBrowser.tabpanels || null;
+        }
+
+        return getTabContainer(tab);
+    }
+
+    function cancelTabAnimation(element) {
+        if (!element) return;
+
+        const animation = tabAnimations.get(element);
 
         if (!animation) return;
 
@@ -291,51 +371,47 @@
             // Best-effort cleanup.
         }
 
-        tabAnimations.delete(container);
+        tabAnimations.delete(element);
     }
 
     function animateTabPanel(
-        container,
+        element,
         from,
         to,
         settings
     ) {
-        if (!container || settings.duration <= 0) {
+        if (
+            !element ||
+            settings.duration <= 0
+        ) {
             return;
         }
 
-        cancelTabAnimation(container);
+        cancelTabAnimation(element);
 
-        try {
-            const animation = container.animate(
-                [from, to],
-                {
-                    duration: settings.duration,
-                    easing: settings.easing,
-                    fill: "none"
-                }
-            );
+        const animation = animate(
+            element,
+            from,
+            to,
+            settings.duration,
+            settings.easing,
+            "none"
+        );
 
-            tabAnimations.set(
-                container,
-                animation
-            );
+        if (!animation) return;
 
-            animation.onfinish = () => {
-                if (
-                    tabAnimations.get(container) ===
-                    animation
-                ) {
-                    tabAnimations.delete(container);
-                }
-            };
+        tabAnimations.set(
+            element,
+            animation
+        );
 
-        } catch (error) {
-            console.warn(
-                "[Smooth Tab Transition] Tab animation error:",
-                error
-            );
-        }
+        animation.onfinish = () => {
+            if (
+                tabAnimations.get(element) === animation
+            ) {
+                tabAnimations.delete(element);
+            }
+        };
     }
 
     function animateTabChange(event) {
@@ -359,30 +435,68 @@
             return;
         }
 
+        const oldIsSplit = isSplitViewTab(oldTab);
+        const newIsSplit = isSplitViewTab(newTab);
+
         /*
-         * Do not animate when switching focus between
-         * panels belonging to the same Split View group.
+         * If both tabs belong to the same Split View,
+         * changing the active panel must not animate.
          */
-        const oldGroup = oldTab.group;
-        const newGroup = newTab.group;
-
         if (
-            oldGroup &&
-            newGroup &&
-            oldGroup === newGroup
+            oldIsSplit &&
+            newIsSplit &&
+            oldTab.group === newTab.group
         ) {
-            return;
-        }
-
-        const oldContainer = getTabContainer(oldTab);
-        const newContainer = getTabContainer(newTab);
-
-        if (!oldContainer || !newContainer) {
             return;
         }
 
         const hidden = getTabHiddenFrame(settings);
         const visible = visibleFrame();
+
+        /*
+         * SPECIAL SPLIT VIEW TRANSITION
+         *
+         * If either the old or the new tab belongs
+         * to a Split View, animate the shared tabpanels
+         * as ONE visual element.
+         *
+         * This avoids animating each Split View pane
+         * separately.
+         */
+        if (oldIsSplit || newIsSplit) {
+            const splitTarget = gBrowser.tabpanels;
+
+            if (!splitTarget) return;
+
+            /*
+             * One animation only.
+             *
+             * The new visual state enters as a single
+             * tab-like unit, regardless of how many
+             * panels are inside the Split View.
+             */
+            animateTabPanel(
+                splitTarget,
+                hidden,
+                visible,
+                settings
+            );
+
+            return;
+        }
+
+        /*
+         * NORMAL SINGLE-TAB TRANSITION
+         */
+        const oldContainer = getTabTransitionTarget(oldTab);
+        const newContainer = getTabTransitionTarget(newTab);
+
+        if (
+            !oldContainer ||
+            !newContainer
+        ) {
+            return;
+        }
 
         animateTabPanel(
             oldContainer,
@@ -404,17 +518,14 @@
     ================================================ */
 
     /*
-     * IMPORTANT:
+     * Loading is deliberately independent from
+     * the visual Split View group.
      *
-     * The loading animation is applied directly to the
-     * linkedBrowser element.
+     * Each linkedBrowser receives its own animation.
      *
-     * It is NOT applied to .browserSidebarContainer.
-     *
-     * This prevents the native Zen loading indicator
-     * and Split View header from being blurred.
-     *
-     * Each linkedBrowser has its own animation state.
+     * The browser element is used instead of
+     * .browserSidebarContainer so the native Zen
+     * loading indicator remains outside the blur.
      */
 
     function getCurrentFrame(element) {
@@ -435,10 +546,6 @@
         };
     }
 
-    /*
-     * Removes only the animation belonging to
-     * the specified browser.
-     */
     function clearLoadingState(browser, state) {
         if (!state) return;
 
@@ -481,7 +588,7 @@
         let startFrame = visibleFrame();
 
         /*
-         * If another request starts in the same pane,
+         * If a new navigation starts in the same pane,
          * continue from its current visual state.
          */
         if (previous) {
@@ -505,31 +612,18 @@
             finishing: false
         };
 
-        try {
-            state.animation = browser.animate(
-                [
-                    startFrame,
-                    hidden
-                ],
-                {
-                    duration: settings.loadingDuration,
-                    easing: settings.loadingEasing,
-
-                    /*
-                     * CRITICAL FIX:
-                     * Keep blur, scale and opacity active
-                     * after the entrance animation finishes.
-                     */
-                    fill: "forwards"
-                }
-            );
-
-        } catch (error) {
-            console.warn(
-                "[Smooth Tab Transition] Loading start error:",
-                error
-            );
-        }
+        /*
+         * The loading animation keeps its final
+         * blur/scale/opacity state until STATE_STOP.
+         */
+        state.animation = animate(
+            browser,
+            startFrame,
+            hidden,
+            settings.loadingDuration,
+            settings.loadingEasing,
+            "forwards"
+        );
 
         /*
          * Fallback timeout in case STATE_STOP
@@ -543,7 +637,7 @@
         );
 
         /*
-         * Store state separately for this browser.
+         * Separate state for every linkedBrowser.
          */
         loadingStates.set(
             browser,
@@ -589,20 +683,18 @@
         let currentFrame = getLoadingHiddenFrame(settings);
 
         /*
-         * Capture the actual visual state before
+         * Capture the current appearance before
          * cancelling the entrance animation.
-         *
-         * This avoids a flash when a page loads
-         * faster than the entrance animation.
          */
         try {
             currentFrame = getCurrentFrame(browser);
         } catch {
-            // Use configured hidden frame.
+            // Use the configured hidden frame.
         }
 
         /*
-         * Cancel only this browser's entrance animation.
+         * Cancel only the animation belonging
+         * to this particular browser.
          */
         if (state.animation) {
             try {
@@ -615,54 +707,35 @@
         }
 
         /*
-         * Animate this pane back to its normal appearance.
+         * Animate this individual pane back
+         * to its normal appearance.
          */
-        try {
-            const completion = browser.animate(
-                [
-                    currentFrame,
-                    visibleFrame()
-                ],
-                {
-                    duration: settings.completionDuration,
-                    easing: settings.loadingEasing,
-                    fill: "forwards"
-                }
-            );
+        const completion = animate(
+            browser,
+            currentFrame,
+            visibleFrame(),
+            settings.completionDuration,
+            settings.loadingEasing,
+            "forwards"
+        );
 
-            state.animation = completion;
+        state.animation = completion;
 
-            if (completion) {
-                completion.onfinish = () => {
-                    /*
-                     * Remove the finished animation.
-                     * The browser returns to its normal
-                     * unfiltered appearance.
-                     */
-                    clearLoadingState(
-                        browser,
-                        state
-                    );
-                };
-
-            } else {
-                clearLoadingState(
-                    browser,
-                    state
-                );
-            }
-
-        } catch (error) {
-            console.warn(
-                "[Smooth Tab Transition] Loading completion error:",
-                error
-            );
-
+        if (!completion) {
             clearLoadingState(
                 browser,
                 state
             );
+
+            return;
         }
+
+        completion.onfinish = () => {
+            clearLoadingState(
+                browser,
+                state
+            );
+        };
     }
 
     /* ================================================
@@ -682,10 +755,6 @@
             !shouldAnimate(settings) ||
             !webProgress?.isTopLevel
         ) {
-            /*
-             * Disabling loading animations cleans up
-             * only the affected browser.
-             */
             if (
                 browser &&
                 !settings.loadingEnabled
@@ -720,8 +789,7 @@
         );
 
         /*
-         * START and STOP are handled independently
-         * for every linkedBrowser.
+         * Every browser handles its own START and STOP.
          */
         if (isStart) {
             animateLoadingStart(
@@ -750,7 +818,6 @@
                     request,
                     flags
                 );
-
             } catch (error) {
                 console.warn(
                     "[Smooth Tab Transition] Progress listener error:",
@@ -780,7 +847,7 @@
         window.__smoothTabTransition110Initialized = true;
 
         /*
-         * Tab switching listener.
+         * Tab selection listener.
          */
         window.addEventListener(
             "TabSelect",
@@ -789,14 +856,12 @@
         );
 
         /*
-         * Loading listener.
-         * Zen reports progress separately for each browser.
+         * Independent loading listener.
          */
         try {
             gBrowser.addTabsProgressListener(
                 progressListener
             );
-
         } catch (error) {
             console.error(
                 "[Smooth Tab Transition] Could not register loading listener:",
@@ -811,7 +876,6 @@
 
     if (gBrowser?.tabContainer) {
         init();
-
     } else {
         window.addEventListener(
             "load",
