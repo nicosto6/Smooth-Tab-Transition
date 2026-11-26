@@ -1,1 +1,137 @@
-[]
+
+[
+  {
+    "property": "smooth-tab-transition.enabled",
+    "label": "Enable Tab Transition",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "smooth-tab-transition.duration",
+    "label": "Tab Transition Duration (ms)",
+    "type": "string",
+    "defaultValue": "360"
+  },
+  {
+    "property": "smooth-tab-transition.scale",
+    "label": "Tab Transition Scale",
+    "type": "string",
+    "defaultValue": "0.965"
+  },
+  {
+    "property": "smooth-tab-transition.blur",
+    "label": "Tab Transition Blur (px)",
+    "type": "string",
+    "defaultValue": "8"
+  },
+  {
+    "property": "smooth-tab-transition.opacity",
+    "label": "Tab Transition Opacity",
+    "type": "string",
+    "defaultValue": "0.55"
+  },
+  {
+    "property": "smooth-tab-transition.easing",
+    "label": "Tab Transition Easing",
+    "type": "dropdown",
+    "defaultValue": "smooth",
+    "options": [
+      {
+        "label": "Smooth",
+        "value": "smooth"
+      },
+      {
+        "label": "Snappy",
+        "value": "snappy"
+      },
+      {
+        "label": "Soft",
+        "value": "soft"
+      },
+      {
+        "label": "Cinematic",
+        "value": "cinematic"
+      },
+      {
+        "label": "Linear",
+        "value": "linear"
+      }
+    ]
+  },
+  {
+    "property": "smooth-tab-transition.loading-enabled",
+    "label": "Enable Loading Transition",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "smooth-tab-transition.loading-duration",
+    "label": "Loading Start Duration (ms)",
+    "type": "string",
+    "defaultValue": "240"
+  },
+  {
+    "property": "smooth-tab-transition.completion-duration",
+    "label": "Loading Completion Duration (ms)",
+    "type": "string",
+    "defaultValue": "520"
+  },
+  {
+    "property": "smooth-tab-transition.loading-scale",
+    "label": "Loading Scale",
+    "type": "string",
+    "defaultValue": "0.965"
+  },
+  {
+    "property": "smooth-tab-transition.loading-blur",
+    "label": "Loading Blur (px)",
+    "type": "string",
+    "defaultValue": "8"
+  },
+  {
+    "property": "smooth-tab-transition.loading-opacity",
+    "label": "Loading Opacity",
+    "type": "string",
+    "defaultValue": "0.55"
+  },
+  {
+    "property": "smooth-tab-transition.loading-easing",
+    "label": "Loading Transition Easing",
+    "type": "dropdown",
+    "defaultValue": "smooth",
+    "options": [
+      {
+        "label": "Smooth",
+        "value": "smooth"
+      },
+      {
+        "label": "Snappy",
+        "value": "snappy"
+      },
+      {
+        "label": "Soft",
+        "value": "soft"
+      },
+      {
+        "label": "Cinematic",
+        "value": "cinematic"
+      },
+      {
+        "label": "Linear",
+        "value": "linear"
+      }
+    ]
+  },
+  {
+    "property": "smooth-tab-transition.loading-timeout",
+    "label": "Loading Safety Timeout (ms)",
+    "type": "string",
+    "defaultValue": "15000"
+  },
+  {
+    "property": "smooth-tab-transition.respect-reduced-motion",
+    "label": "Respect Reduced Motion",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]
