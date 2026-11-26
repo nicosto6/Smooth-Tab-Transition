@@ -2,26 +2,25 @@
 {
   "id": "smooth-tab-transition",
   "name": "Smooth Tab Transition",
-  "description": "Smooth zoom, blur and fade animations when switching tabs, excluding Zen Split View.",
-  "version": "1.0.0",
+  "description": "Smooth zoom and blur animations when switching Zen Browser tabs.",
+  "homepage": "https://github.com/TUO-USERNAME/Smooth-Tab-Transition",
   "author": "Custom",
-  "homepage": "https://github.com/",
-  "tags": [
-    "animations",
-    "tabs",
-    "blur",
-    "transition"
-  ],
-  "fork": [
-    "zen"
-  ],
+  "version": "1.0.0",
   "scripts": {
-    "smooth-tab-transition.uc.mjs": {
-      "name": "Tab Transition",
-      "description": "Animates tab changes with zoom and blur, excluding split view.",
+    "smooth-tab-transition.uc.js": {
+      "name": "Smooth Tab Transition",
+      "description": "Animated zoom and blur when switching tabs.",
       "include": [
         "chrome://browser/content/browser.xhtml"
       ]
     }
-  }
+  },
+  "tags": [
+    "tabs",
+    "animations",
+    "blur"
+  ],
+  "fork": [
+    "zen"
+  ]
 }
