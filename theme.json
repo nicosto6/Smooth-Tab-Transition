@@ -3,11 +3,11 @@
   "id": "smooth-tab-transition",
   "name": "Smooth Tab Transition",
   "description": "Smooth zoom and blur animations when switching Zen Browser tabs.",
-  "homepage": "https://github.com/TUO-USERNAME/Smooth-Tab-Transition",
-  "author": "Custom",
-  "version": "1.0.0",
+  "homepage": "https://github.com/nicosto6/Smooth-Tab-Transition",
+  "author": "nicosto6",
+  "version": "1.0.1",
   "scripts": {
-    "smooth-tab-transition.uc.js": {
+    "smooth-tab-transition.uc.mjs": {
       "name": "Smooth Tab Transition",
       "description": "Animated zoom and blur when switching tabs.",
       "include": [
