@@ -1,0 +1,73 @@
+
+[
+  {
+    "property": "smooth-tab-transition.enabled",
+    "label": "Enable Smooth Tab Transition",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "smooth-tab-transition.duration",
+    "label": "Animation duration (ms)",
+    "type": "string",
+    "defaultValue": "360",
+    "placeholder": "360"
+  },
+  {
+    "property": "smooth-tab-transition.scale",
+    "label": "Minimum scale",
+    "type": "string",
+    "defaultValue": "0.965",
+    "placeholder": "0.965"
+  },
+  {
+    "property": "smooth-tab-transition.blur",
+    "label": "Blur intensity (px)",
+    "type": "string",
+    "defaultValue": "8",
+    "placeholder": "8"
+  },
+  {
+    "property": "smooth-tab-transition.opacity",
+    "label": "Minimum opacity",
+    "type": "string",
+    "defaultValue": "0.55",
+    "placeholder": "0.55"
+  },
+  {
+    "property": "smooth-tab-transition.easing",
+    "label": "Animation style",
+    "type": "dropdown",
+    "defaultValue": "smooth",
+    "options": [
+      {
+        "label": "Smooth",
+        "value": "smooth"
+      },
+      {
+        "label": "Snappy",
+        "value": "snappy"
+      },
+      {
+        "label": "Soft",
+        "value": "soft"
+      },
+      {
+        "label": "Linear",
+        "value": "linear"
+      }
+    ]
+  },
+  {
+    "property": "smooth-tab-transition.animate-split",
+    "label": "Animate Split View transitions",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "smooth-tab-transition.respect-reduced-motion",
+    "label": "Respect reduced motion settings",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]
