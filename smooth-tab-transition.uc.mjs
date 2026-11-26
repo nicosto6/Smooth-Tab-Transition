@@ -2,17 +2,25 @@
 /*
  * Smooth Tab Transition
  * Zen Browser + Sine
- * Version: 1.1.0
+ * Version: 1.1.0-fixed
  *
- * Tab Transition:
+ * TAB TRANSITION:
  * - Independent duration, scale, blur, opacity and easing.
+ * - Animates the whole Zen tab panel.
+ * - Does not animate when switching between panels
+ *   belonging to the same Split View group.
  *
- * Loading Transition:
+ * LOADING TRANSITION:
  * - Independent duration, scale, blur, opacity and easing.
  * - Uses the browser progress listener.
- * - Animates only the page content container.
+ * - Each linkedBrowser has its own loading state and animation.
+ * - The loading effect is applied to the page's <browser> element only.
+ * - The native Zen loading indicator is not filtered.
  *
- * The native Zen loading progress indicator is not modified.
+ * SPLIT VIEW:
+ * - Each pane has its own linkedBrowser.
+ * - Each pane loads and finishes independently.
+ * - One pane cannot cancel another pane's loading animation.
  */
 
 (() => {
@@ -55,7 +63,20 @@
         "(prefers-reduced-motion: reduce)"
     );
 
+    /*
+     * Every linkedBrowser has its own state.
+     * This is essential for independent Split View loading.
+     */
     const loadingStates = new WeakMap();
+
+    /*
+     * Tab animations are stored separately from loading animations.
+     */
+    const tabAnimations = new WeakMap();
+
+    /* ================================================
+       PREFERENCES
+    ================================================ */
 
     function getBool(name, fallback) {
         try {
@@ -80,45 +101,73 @@
     }
 
     function getNumber(name, fallback, min, max) {
-        const value = Number(getString(name, fallback));
+        const value = Number(
+            getString(name, fallback)
+        );
 
-        if (!Number.isFinite(value)) return fallback;
+        if (!Number.isFinite(value)) {
+            return fallback;
+        }
 
-        return Math.min(max, Math.max(min, value));
+        return Math.min(
+            max,
+            Math.max(min, value)
+        );
     }
 
     function getEasing(name, fallback) {
         const value = getString(name, fallback);
 
-        return EASINGS[value] || EASINGS[fallback];
+        return (
+            EASINGS[value] ||
+            EASINGS[fallback] ||
+            EASINGS.smooth
+        );
     }
 
     function getSettings() {
         return {
-            enabled: getBool("enabled", DEFAULTS.enabled),
+            enabled: getBool(
+                "enabled",
+                DEFAULTS.enabled
+            ),
 
             duration: getNumber(
-                "duration", DEFAULTS.duration, 50, 3000
+                "duration",
+                DEFAULTS.duration,
+                50,
+                3000
             ),
 
             scale: getNumber(
-                "scale", DEFAULTS.scale, 0.5, 1
+                "scale",
+                DEFAULTS.scale,
+                0.5,
+                1
             ),
 
             blur: getNumber(
-                "blur", DEFAULTS.blur, 0, 40
+                "blur",
+                DEFAULTS.blur,
+                0,
+                40
             ),
 
             opacity: getNumber(
-                "opacity", DEFAULTS.opacity, 0, 1
+                "opacity",
+                DEFAULTS.opacity,
+                0,
+                1
             ),
 
             easing: getEasing(
-                "easing", DEFAULTS.easing
+                "easing",
+                DEFAULTS.easing
             ),
 
             loadingEnabled: getBool(
-                "loading-enabled", DEFAULTS.loadingEnabled
+                "loading-enabled",
+                DEFAULTS.loadingEnabled
             ),
 
             loadingDuration: getNumber(
@@ -182,56 +231,9 @@
         );
     }
 
-    /*
-     * Returns the visible content container.
-     * The browser's native loading indicator is outside this target.
-     */
-    function getContainer(tab) {
-        const browser = tab?.linkedBrowser;
-
-        if (!browser) return null;
-
-        return (
-            browser.closest(".browserSidebarContainer") ||
-            browser.closest(".browserStack") ||
-            browser.parentElement
-        );
-    }
-
-    function cancelAnimation(container) {
-        if (!container) return;
-
-        try {
-            container.getAnimations().forEach(animation => {
-                animation.cancel();
-            });
-        } catch {
-            // Animation cancellation is best-effort.
-        }
-    }
-
-    function animate(container, from, to, duration, easing) {
-        if (!container || duration <= 0) return null;
-
-        cancelAnimation(container);
-
-        try {
-            return container.animate(
-                [from, to],
-                {
-                    duration,
-                    easing,
-                    fill
-                });
-        } catch (error) {
-            console.warn(
-                "[Smooth Tab Transition] Animation error:",
-                error
-            );
-
-            return null;
-        }
-    }
+    /* ================================================
+       ANIMATION FRAMES
+    ================================================ */
 
     function visibleFrame() {
         return {
@@ -257,14 +259,92 @@
         };
     }
 
+    /* ================================================
+       TAB TRANSITION
+    ================================================ */
+
     /*
-     * TAB TRANSITION
+     * Returns the complete visual container of a tab.
      */
+    function getTabContainer(tab) {
+        const browser = tab?.linkedBrowser;
+
+        if (!browser) return null;
+
+        return (
+            browser.closest(".browserSidebarContainer") ||
+            browser.closest(".browserStack") ||
+            browser.parentElement
+        );
+    }
+
+    function cancelTabAnimation(container) {
+        if (!container) return;
+
+        const animation = tabAnimations.get(container);
+
+        if (!animation) return;
+
+        try {
+            animation.cancel();
+        } catch {
+            // Best-effort cleanup.
+        }
+
+        tabAnimations.delete(container);
+    }
+
+    function animateTabPanel(
+        container,
+        from,
+        to,
+        settings
+    ) {
+        if (!container || settings.duration <= 0) {
+            return;
+        }
+
+        cancelTabAnimation(container);
+
+        try {
+            const animation = container.animate(
+                [from, to],
+                {
+                    duration: settings.duration,
+                    easing: settings.easing,
+                    fill: "none"
+                }
+            );
+
+            tabAnimations.set(
+                container,
+                animation
+            );
+
+            animation.onfinish = () => {
+                if (
+                    tabAnimations.get(container) ===
+                    animation
+                ) {
+                    tabAnimations.delete(container);
+                }
+            };
+
+        } catch (error) {
+            console.warn(
+                "[Smooth Tab Transition] Tab animation error:",
+                error
+            );
+        }
+    }
 
     function animateTabChange(event) {
         const settings = getSettings();
 
-        if (!settings.enabled || !shouldAnimate(settings)) {
+        if (
+            !settings.enabled ||
+            !shouldAnimate(settings)
+        ) {
             return;
         }
 
@@ -279,13 +359,10 @@
             return;
         }
 
-        const oldContainer = getContainer(oldTab);
-        const newContainer = getContainer(newTab);
-
-        if (!oldContainer || !newContainer) return;
-
-        // Do not animate when switching between panels
-        // belonging to the same Split View group.
+        /*
+         * Do not animate when switching focus between
+         * panels belonging to the same Split View group.
+         */
         const oldGroup = oldTab.group;
         const newGroup = newTab.group;
 
@@ -297,101 +374,300 @@
             return;
         }
 
+        const oldContainer = getTabContainer(oldTab);
+        const newContainer = getTabContainer(newTab);
+
+        if (!oldContainer || !newContainer) {
+            return;
+        }
+
         const hidden = getTabHiddenFrame(settings);
         const visible = visibleFrame();
 
-        animate(
+        animateTabPanel(
             oldContainer,
             visible,
             hidden,
-            settings.duration,
-            settings.easing
+            settings
         );
 
-        animate(
+        animateTabPanel(
             newContainer,
             hidden,
             visible,
-            settings.duration,
-            settings.easing
+            settings
         );
+    }
+
+    /* ================================================
+       LOADING TRANSITION
+    ================================================ */
+
+    /*
+     * IMPORTANT:
+     *
+     * The loading animation is applied directly to the
+     * linkedBrowser element.
+     *
+     * It is NOT applied to .browserSidebarContainer.
+     *
+     * This prevents the native Zen loading indicator
+     * and Split View header from being blurred.
+     *
+     * Each linkedBrowser has its own animation state.
+     */
+
+    function getCurrentFrame(element) {
+        const style = window.getComputedStyle(element);
+
+        return {
+            transform:
+                style.transform === "none"
+                    ? "scale(1)"
+                    : style.transform,
+
+            filter:
+                style.filter === "none"
+                    ? "blur(0px)"
+                    : style.filter,
+
+            opacity: Number(style.opacity)
+        };
     }
 
     /*
-     * LOADING TRANSITION
-     *
-     * Loading is independent from Tab Transition.
-     * It uses its own scale, blur, opacity and durations.
+     * Removes only the animation belonging to
+     * the specified browser.
      */
-
-    function animateLoadingStart(browser, settings) {
-        const container = browser?.closest(
-            ".browserSidebarContainer"
-        );
-
-        if (!container) return;
-
-        const previous = loadingStates.get(browser);
-
-        if (previous?.timer) {
-            window.clearTimeout(previous.timer);
-        }
-
-        const hidden = getLoadingHiddenFrame(settings);
-        const visible = visibleFrame();
-
-        const animation = animate(
-            container,
-            visible,
-            hidden,
-            settings.loadingDuration,
-            settings.loadingEasing,
-            "forwards"
-        );
-
-        const state = {
-            container,
-            animation,
-            timer: null
-        };
-
-        state.timer = window.setTimeout(() => {
-            finishLoading(browser);
-        }, settings.loadingTimeout);
-
-        loadingStates.set(browser, state);
-    }
-
-    function finishLoading(browser) {
-        const state = loadingStates.get(browser);
-
+    function clearLoadingState(browser, state) {
         if (!state) return;
 
         if (state.timer) {
             window.clearTimeout(state.timer);
+            state.timer = null;
+        }
+
+        if (state.animation) {
+            try {
+                state.animation.cancel();
+            } catch {
+                // Best-effort cleanup.
+            }
+
+            state.animation = null;
+        }
+
+        if (
+            loadingStates.get(browser) === state
+        ) {
+            loadingStates.delete(browser);
+        }
+    }
+
+    /* ================================================
+       LOADING START
+    ================================================ */
+
+    function animateLoadingStart(browser, settings) {
+        if (
+            !browser ||
+            !browser.isConnected
+        ) {
+            return;
+        }
+
+        const previous = loadingStates.get(browser);
+
+        let startFrame = visibleFrame();
+
+        /*
+         * If another request starts in the same pane,
+         * continue from its current visual state.
+         */
+        if (previous) {
+            try {
+                startFrame = getCurrentFrame(browser);
+            } catch {
+                startFrame = getLoadingHiddenFrame(settings);
+            }
+
+            clearLoadingState(
+                browser,
+                previous
+            );
+        }
+
+        const hidden = getLoadingHiddenFrame(settings);
+
+        const state = {
+            animation: null,
+            timer: null,
+            finishing: false
+        };
+
+        try {
+            state.animation = browser.animate(
+                [
+                    startFrame,
+                    hidden
+                ],
+                {
+                    duration: settings.loadingDuration,
+                    easing: settings.loadingEasing,
+
+                    /*
+                     * CRITICAL FIX:
+                     * Keep blur, scale and opacity active
+                     * after the entrance animation finishes.
+                     */
+                    fill: "forwards"
+                }
+            );
+
+        } catch (error) {
+            console.warn(
+                "[Smooth Tab Transition] Loading start error:",
+                error
+            );
+        }
+
+        /*
+         * Fallback timeout in case STATE_STOP
+         * is never received.
+         */
+        state.timer = window.setTimeout(
+            () => {
+                finishLoading(browser);
+            },
+            settings.loadingTimeout
+        );
+
+        /*
+         * Store state separately for this browser.
+         */
+        loadingStates.set(
+            browser,
+            state
+        );
+    }
+
+    /* ================================================
+       LOADING FINISH
+    ================================================ */
+
+    function finishLoading(browser) {
+        const state = loadingStates.get(browser);
+
+        if (
+            !state ||
+            state.finishing
+        ) {
+            return;
+        }
+
+        state.finishing = true;
+
+        if (state.timer) {
+            window.clearTimeout(state.timer);
+            state.timer = null;
         }
 
         const settings = getSettings();
 
-        if (!settings.loadingEnabled || !shouldAnimate(settings)) {
-            cancelAnimation(state.container);
-            loadingStates.delete(browser);
+        if (
+            !settings.loadingEnabled ||
+            !shouldAnimate(settings)
+        ) {
+            clearLoadingState(
+                browser,
+                state
+            );
+
             return;
         }
 
-        const hidden = getLoadingHiddenFrame(settings);
-        const visible = visibleFrame();
+        let currentFrame = getLoadingHiddenFrame(settings);
 
-        animate(
-            state.container,
-            hidden,
-            visible,
-            settings.completionDuration,
-            settings.loadingEasing
-        );
+        /*
+         * Capture the actual visual state before
+         * cancelling the entrance animation.
+         *
+         * This avoids a flash when a page loads
+         * faster than the entrance animation.
+         */
+        try {
+            currentFrame = getCurrentFrame(browser);
+        } catch {
+            // Use configured hidden frame.
+        }
 
-        loadingStates.delete(browser);
+        /*
+         * Cancel only this browser's entrance animation.
+         */
+        if (state.animation) {
+            try {
+                state.animation.cancel();
+            } catch {
+                // Best-effort cleanup.
+            }
+
+            state.animation = null;
+        }
+
+        /*
+         * Animate this pane back to its normal appearance.
+         */
+        try {
+            const completion = browser.animate(
+                [
+                    currentFrame,
+                    visibleFrame()
+                ],
+                {
+                    duration: settings.completionDuration,
+                    easing: settings.loadingEasing,
+                    fill: "forwards"
+                }
+            );
+
+            state.animation = completion;
+
+            if (completion) {
+                completion.onfinish = () => {
+                    /*
+                     * Remove the finished animation.
+                     * The browser returns to its normal
+                     * unfiltered appearance.
+                     */
+                    clearLoadingState(
+                        browser,
+                        state
+                    );
+                };
+
+            } else {
+                clearLoadingState(
+                    browser,
+                    state
+                );
+            }
+
+        } catch (error) {
+            console.warn(
+                "[Smooth Tab Transition] Loading completion error:",
+                error
+            );
+
+            clearLoadingState(
+                browser,
+                state
+            );
+        }
     }
+
+    /* ================================================
+       PROGRESS LISTENER
+    ================================================ */
 
     function onProgressStateChange(
         browser,
@@ -406,6 +682,24 @@
             !shouldAnimate(settings) ||
             !webProgress?.isTopLevel
         ) {
+            /*
+             * Disabling loading animations cleans up
+             * only the affected browser.
+             */
+            if (
+                browser &&
+                !settings.loadingEnabled
+            ) {
+                const state = loadingStates.get(browser);
+
+                if (state) {
+                    clearLoadingState(
+                        browser,
+                        state
+                    );
+                }
+            }
+
             return;
         }
 
@@ -425,8 +719,15 @@
             flags & listener.STATE_STOP
         );
 
+        /*
+         * START and STOP are handled independently
+         * for every linkedBrowser.
+         */
         if (isStart) {
-            animateLoadingStart(browser, settings);
+            animateLoadingStart(
+                browser,
+                settings
+            );
         }
 
         if (isStop) {
@@ -449,6 +750,7 @@
                     request,
                     flags
                 );
+
             } catch (error) {
                 console.warn(
                     "[Smooth Tab Transition] Progress listener error:",
@@ -464,21 +766,37 @@
         onContentBlockingEvent() {}
     };
 
-    /*
-     * INITIALIZATION
-     */
+    /* ================================================
+       INITIALIZATION
+    ================================================ */
 
     function init() {
+        if (
+            window.__smoothTabTransition110Initialized
+        ) {
+            return;
+        }
+
+        window.__smoothTabTransition110Initialized = true;
+
+        /*
+         * Tab switching listener.
+         */
         window.addEventListener(
             "TabSelect",
             animateTabChange,
             true
         );
 
+        /*
+         * Loading listener.
+         * Zen reports progress separately for each browser.
+         */
         try {
             gBrowser.addTabsProgressListener(
                 progressListener
             );
+
         } catch (error) {
             console.error(
                 "[Smooth Tab Transition] Could not register loading listener:",
@@ -487,12 +805,13 @@
         }
 
         console.log(
-            "[Smooth Tab Transition] v1.1.0 loaded successfully."
+            "[Smooth Tab Transition] v1.1.0-fixed loaded successfully."
         );
     }
 
     if (gBrowser?.tabContainer) {
         init();
+
     } else {
         window.addEventListener(
             "load",
@@ -500,4 +819,5 @@
             { once: true }
         );
     }
+
 })();
