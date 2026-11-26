@@ -2,14 +2,15 @@
 {
   "id": "smooth-tab-transition",
   "name": "Smooth Tab Transition",
-  "description": "Smooth zoom and blur animations when switching Zen Browser tabs.",
+  "description": "Smooth zoom and blur animations for Zen Browser, including unified Split View transitions.",
   "homepage": "https://github.com/nicosto6/Smooth-Tab-Transition",
   "author": "nicosto6",
-  "version": "1.0.1",
+  "version": "2.0.0",
+  "preferences": "preferences.json",
   "scripts": {
     "smooth-tab-transition.uc.mjs": {
       "name": "Smooth Tab Transition",
-      "description": "Animated zoom and blur when switching tabs.",
+      "description": "Animated tab transitions with unified Split View support.",
       "include": [
         "chrome://browser/content/browser.xhtml"
       ]
@@ -18,7 +19,8 @@
   "tags": [
     "tabs",
     "animations",
-    "blur"
+    "blur",
+    "split-view"
   ],
   "fork": [
     "zen"
