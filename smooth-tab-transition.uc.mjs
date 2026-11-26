@@ -27,19 +27,15 @@
         );
     }
 
-    function isSplitView(oldTab, newTab) {
-        const panels = gBrowser.tabpanels;
 
-        return (
-            panels.hasAttribute("zen-split-view") ||
-            oldTab?.splitView === true ||
-            newTab?.splitView === true ||
-            oldTab?.hasAttribute("split-view") ||
-            newTab?.hasAttribute("split-view") ||
-            getContainer(oldTab)?.hasAttribute("is-zen-split") ||
-            getContainer(newTab)?.hasAttribute("is-zen-split")
-        );
-    }
+  function isSplitView(oldTab, newTab) {
+        return [oldTab, newTab].some(tab =>
+            tab?.group?.hasAttribute("split-view-group") ||
+            tab?.hasAttribute("split-view") ||
+            tab?.splitView === true
+    );
+}
+
 
     function animate(container, entering) {
         if (!container) return;
