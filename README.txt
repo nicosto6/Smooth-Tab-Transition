@@ -1,21 +1,74 @@
-# Smooth Tab Transition v4.0.0
 
-## Files
-- `theme.json`
-- `preferences.json`
-- `smooth-tab-transition.uc.mjs`
+# Smooth Tab Transition
 
-## Install/update
-Replace the corresponding files in the root of your GitHub repository. Keep the filenames exactly as shown. Sine should then detect the new version after the repository update is available.
+Smooth Tab Transition is a Zen Browser mod that adds independent animations for tab switching and page loading.
 
-## Open settings
-After enabling/reloading the mod, look for the small circular `◌` toolbar button. Click it to open the integrated settings panel. The panel has Tab Transition, Loading Transition, and General sections.
+## Features
 
-## Important testing note
-This is a first implementation for Zen's chrome context, not a claim of verified compatibility with every Zen release. Test it in a separate Zen profile. If the toolbar button does not appear, the toolbar insertion point may differ in your Zen build. Split View internals also vary by Zen version.
+### Tab Transition
+- Smooth zoom transition
+- Blur effect
+- Opacity control
+- Independent duration
+- Multiple easing curves
 
-## Current implementation boundaries
-- The native Zen loading progress indicator is not selected or styled by this mod; animations are applied to the browser content container.
-- Tab and loading settings are stored separately.
-- Curve editor supports draggable cubic-bezier control points; Elastic and Bounce are evaluated as sampled curves.
-- Loading settings currently govern the wait/fallback behavior and loading animation curve; the main tab-selection transition engine still uses the tab transition settings for its visual entry/exit. Further validation against your exact Zen build is required before treating every advanced loading control as production-ready.
+### Loading Transition
+- Independent from Tab Transition
+- Separate scale, blur and opacity
+- Separate start and completion durations
+- Separate easing curve
+- Safety timeout for unfinished loads
+
+### Other
+- Respects the operating system's reduced-motion preference
+- Does not modify Zen's native loading progress indicator
+- Settings are available through Zen Mods preferences
+
+## Installation
+
+1. Install the mod through Sine.
+2. Restart Zen Browser if necessary.
+3. Open Zen Settings and go to Mods.
+4. Select Smooth Tab Transition.
+5. Configure Tab Transition and Loading Transition independently.
+
+## Preferences
+
+All settings are defined in `preferences.json`.
+
+Tab settings:
+- `enabled`
+- `duration`
+- `scale`
+- `blur`
+- `opacity`
+- `easing`
+
+Loading settings:
+- `loading-enabled`
+- `loading-duration`
+- `completion-duration`
+- `loading-scale`
+- `loading-blur`
+- `loading-opacity`
+- `loading-easing`
+- `loading-timeout`
+
+General:
+- `respect-reduced-motion`
+
+## Technical notes
+
+The mod uses the browser tab progress listener to detect top-level network loading events.
+
+Animations are applied to the page content container, not to the native Zen loading progress indicator.
+
+## Compatibility
+
+Designed for Zen Browser with Sine JavaScript mod support.
+
+The code should be tested against the specific Zen version in use, especially for Split View behavior and browser progress events.
+
+## Version
+
+1.1.0
