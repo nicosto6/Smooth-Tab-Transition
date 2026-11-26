@@ -221,9 +221,8 @@
                 {
                     duration,
                     easing,
-                    fill: "none"
-                }
-            );
+                    fill
+                });
         } catch (error) {
             console.warn(
                 "[Smooth Tab Transition] Animation error:",
@@ -346,7 +345,8 @@
             visible,
             hidden,
             settings.loadingDuration,
-            settings.loadingEasing
+            settings.loadingEasing,
+            "forwards"
         );
 
         const state = {
